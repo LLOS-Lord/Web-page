@@ -1,10 +1,9 @@
-/* ==================== Proxy Key Manager - GitHub Pages Edition ==================== *
- * Hoạt động ở 2 chế độ:
- *   1. Local mode (mặc định): lưu key/IP trong localStorage, không cần server
- *   2. Server mode: gọi API tới Cloudflare Worker (nhập URL trong tab Thông tin)
- *
- * GitHub Pages chỉ chạy static → không có backend.
- * API check-ip cho proxy cần server thật → deploy Cloudflare Worker (file api/worker.js)
+/* ==================== Proxy Key Manager v2 ==================== *
+ * Flow mới:
+ *   1. Admin đăng nhập/đăng ký
+ *   2. Tab "Tạo key & Link": tạo key → tự rút gọn link chứa key → gửi link cho user
+ *   3. User nhận link → mở link → web tự lấy key từ URL → tab Cấp phép IP → nhập key → IP được ghi
+ *   4. Proxy (máy khác) gọi API check-ip → true/false
  */
 
 // ==================== CONFIG ====================
@@ -13,30 +12,130 @@ const KEY_DURATION_DAYS = 30;
 const LS_KEYS = 'pkm_keys';
 const LS_AUTH_IPS = 'pkm_authorized_ips';
 const LS_API_SERVER = 'pkm_api_server';
+const LS_USERS = 'pkm_users';
+const LS_SESSION = 'pkm_session';
 
-// ==================== STORAGE HELPERS ====================
+// ==================== STORAGE ====================
 function getApiServer() { return localStorage.getItem(LS_API_SERVER) || ''; }
 function hasServer() { return getApiServer().length > 0; }
-
-function loadLocalKeys() {
-    try { return JSON.parse(localStorage.getItem(LS_KEYS)) || {}; } catch { return {}; }
-}
-function saveLocalKeys(keys) { localStorage.setItem(LS_KEYS, JSON.stringify(keys)); }
-
-function loadLocalAuthIPs() {
-    try { return JSON.parse(localStorage.getItem(LS_AUTH_IPS)) || {}; } catch { return {}; }
-}
-function saveLocalAuthIPs(map) { localStorage.setItem(LS_AUTH_IPS, JSON.stringify(map)); }
+function loadLocalKeys() { try { return JSON.parse(localStorage.getItem(LS_KEYS)) || {}; } catch { return {}; } }
+function saveLocalKeys(k) { localStorage.setItem(LS_KEYS, JSON.stringify(k)); }
+function loadLocalAuthIPs() { try { return JSON.parse(localStorage.getItem(LS_AUTH_IPS)) || {}; } catch { return {}; } }
+function saveLocalAuthIPs(m) { localStorage.setItem(LS_AUTH_IPS, JSON.stringify(m)); }
+function loadUsers() { try { return JSON.parse(localStorage.getItem(LS_USERS)) || {}; } catch { return {}; } }
+function saveUsers(u) { localStorage.setItem(LS_USERS, JSON.stringify(u)); }
+function getSession() { try { return JSON.parse(localStorage.getItem(LS_SESSION)) || null; } catch { return null; } }
+function setSession(s) { localStorage.setItem(LS_SESSION, JSON.stringify(s)); }
+function clearSession() { localStorage.removeItem(LS_SESSION); }
 
 // ==================== API HELPER ====================
 async function apiCall(path, method = 'GET', body = null) {
     const server = getApiServer();
-    if (!server) return null; // local mode → caller handles
+    if (!server) return null;
     const url = server.replace(/\/+$/, '') + path;
     const opts = { method, headers: { 'Content-Type': 'application/json' } };
     if (body) opts.body = JSON.stringify(body);
     const resp = await fetch(url, opts);
     return resp.json();
+}
+
+// ==================== AUTH ====================
+let authMode = 'login';
+
+function switchAuthMode(mode) {
+    authMode = mode;
+    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('registerNameGroup').style.display = mode === 'register' ? 'block' : 'none';
+    document.getElementById('authTitle').textContent = mode === 'register' ? 'Đăng ký' : 'Đăng nhập';
+    document.getElementById('authSub').textContent = mode === 'register' ? 'Tạo tài khoản mới' : 'Đăng nhập để quản lý key';
+    document.getElementById('authBtn').textContent = mode === 'register' ? 'Đăng ký' : 'Đăng nhập';
+    document.getElementById('authResult').style.display = 'none';
+}
+
+async function doAuth() {
+    const username = document.getElementById('authUsername').value.trim();
+    const password = document.getElementById('authPassword').value;
+    const name = document.getElementById('authName').value.trim();
+    const resultBox = document.getElementById('authResult');
+
+    if (!username || !password) {
+        resultBox.style.display = 'block';
+        resultBox.className = 'result-box result-error';
+        resultBox.textContent = 'Vui lòng nhập đầy đủ.';
+        return;
+    }
+
+    if (hasServer()) {
+        // Server mode
+        try {
+            const endpoint = authMode === 'register' ? '/api/register' : '/api/login';
+            const payload = authMode === 'register' ? { username, password, name } : { username, password };
+            const data = await apiCall(endpoint, 'POST', payload);
+            resultBox.style.display = 'block';
+            if (data && data.success) {
+                setSession({ username: data.username, name: data.name || username, token: data.token || '' });
+                showApp();
+            } else {
+                resultBox.className = 'result-box result-error';
+                resultBox.textContent = '❌ ' + (data?.error || 'Lỗi');
+            }
+        } catch (e) {
+            resultBox.style.display = 'block';
+            resultBox.className = 'result-box result-error';
+            resultBox.textContent = '❌ Lỗi kết nối server';
+        }
+    } else {
+        // Local mode
+        const users = loadUsers();
+        resultBox.style.display = 'block';
+
+        if (authMode === 'register') {
+            if (users[username]) {
+                resultBox.className = 'result-box result-error';
+                resultBox.textContent = '❌ Tên đăng nhập đã tồn tại.';
+                return;
+            }
+            users[username] = { name: name || username, password: btoa(password) };
+            saveUsers(users);
+            setSession({ username, name: name || username });
+            resultBox.className = 'result-box result-success';
+            resultBox.textContent = '✅ Đăng ký thành công!';
+            setTimeout(() => showApp(), 800);
+        } else {
+            if (!users[username] || users[username].password !== btoa(password)) {
+                resultBox.className = 'result-box result-error';
+                resultBox.textContent = '❌ Sai tên đăng nhập hoặc mật khẩu.';
+                return;
+            }
+            setSession({ username, name: users[username].name });
+            resultBox.className = 'result-box result-success';
+            resultBox.textContent = '✅ Đăng nhập thành công!';
+            setTimeout(() => showApp(), 600);
+        }
+    }
+}
+
+function logout() {
+    clearSession();
+    document.getElementById('mainApp').style.display = 'none';
+    document.getElementById('authOverlay').style.display = 'flex';
+    document.getElementById('authUsername').value = '';
+    document.getElementById('authPassword').value = '';
+    document.getElementById('authName').value = '';
+}
+
+function showApp() {
+    const session = getSession();
+    if (!session) return;
+    document.getElementById('authOverlay').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'block';
+    document.getElementById('userName').textContent = session.name || session.username;
+    loadApiServerInput();
+    fetchUserIP();
+    loadKeys();
+    loadRecentKeys();
+    checkUrlForKey();
 }
 
 // ==================== TAB SWITCHING ====================
@@ -81,14 +180,13 @@ function keyInfoLocal(key, keysData) {
     const hours = Math.floor((remainingSec % 86400) / 3600);
     const mins = Math.floor((remainingSec % 3600) / 60);
     return {
-        key, name: k.name || '',
+        key, name: k.name || '', owner: k.owner || '',
         created_at: k.created_at, expires_at: k.expires_at,
         remaining_seconds: remainingSec,
         remaining_text: `${days} ngày ${hours} giờ ${mins} phút`,
         expired: remainingSec <= 0,
         authorized_ip: k.authorized_ip || null,
-        shorten_count: k.shorten_count || 0,
-        shorten_history: k.shorten_history || [],
+        short_url: k.short_url || null,
     };
 }
 
@@ -104,7 +202,6 @@ async function fetchUserIP() {
             return data.ip;
         }
     } catch (e) {
-        // Fallback
         try {
             const resp2 = await fetch('https://ipapi.co/json/');
             const data2 = await resp2.json();
@@ -129,8 +226,6 @@ async function checkIPAuthStatus(ip) {
             if (data && data.authorized) {
                 document.getElementById('ipStatus').textContent = 'Đã cấp phép ✓';
                 document.getElementById('ipStatus').style.color = 'var(--success)';
-            } else {
-                document.getElementById('ipStatus').textContent = 'Chưa cấp phép';
             }
         } catch (e) {}
     } else {
@@ -150,55 +245,159 @@ async function loadKeys() {
             if (data && data.keys) { renderKeys(data.keys); return; }
         } catch (e) {}
     }
-    // Local mode
     const keysData = loadLocalKeys();
-    const result = Object.keys(keysData).map(k => keyInfoLocal(k, keysData)).filter(Boolean);
+    const session = getSession();
+    const result = Object.keys(keysData)
+        .filter(k => !session || keysData[k].owner === session.username || keysData[k].owner === undefined)
+        .map(k => keyInfoLocal(k, keysData)).filter(Boolean);
     renderKeys(result);
 }
 
 function renderKeys(keys) {
     const tbody = document.getElementById('keysTableBody');
     if (!keys || keys.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-row">Chưa có key nào. Nhấn "Tạo key mới" để bắt đầu.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-row">Chưa có key nào. Vào tab "Tạo key & Link" để tạo.</td></tr>';
         return;
     }
     tbody.innerHTML = keys.map(k => `
         <tr>
             <td class="key-cell">${k.key}</td>
-            <td>${k.name || '<span style="color:var(--text-muted)">—</span>'}</td>
-            <td>${k.expired ? '<span style="color:var(--danger)">Đã hết hạn</span>' : k.remaining_text}</td>
+            <td class="link-cell">${k.short_url ? `<span onclick="copyToClipboard('${k.short_url}')" style="cursor:pointer;text-decoration:underline">${k.short_url}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
+            <td>${k.expired ? '<span style="color:var(--danger)">Hết hạn</span>' : k.remaining_text}</td>
             <td>${k.authorized_ip || '<span style="color:var(--text-muted)">Chưa cấp</span>'}</td>
-            <td>${k.shorten_count}</td>
             <td>${k.expired ? '<span class="badge badge-expired">Hết hạn</span>' : '<span class="badge badge-active">Hoạt động</span>'}</td>
             <td><button class="btn btn-danger btn-sm" onclick="deleteKey('${k.key}')">Xoá</button></td>
         </tr>
     `).join('');
 }
 
-// ==================== CREATE KEY ====================
-async function createKey() {
-    const name = prompt('Nhập tên cho key (tuỳ chọn):', '');
-    if (hasServer()) {
-        try {
-            const data = await apiCall('/api/create-key', 'POST', { name: name || '' });
+// ==================== CREATE KEY + SHORTEN ====================
+async function createKeyAndShorten() {
+    const name = document.getElementById('newKeyName').value.trim();
+    const redirectUrl = document.getElementById('keyRedirectUrl').value.trim();
+    const btn = document.getElementById('createKeyBtn');
+    const resultBox = document.getElementById('createResult');
+
+    if (!redirectUrl) {
+        resultBox.style.display = 'block';
+        resultBox.className = 'result-box result-error';
+        resultBox.textContent = 'Vui lòng nhập link đích (link chứa key).';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span>Đang tạo key & rút gọn...</span>';
+
+    try {
+        if (hasServer()) {
+            // Server mode
+            const session = getSession();
+            const data = await apiCall('/api/create-key-and-shorten', 'POST', {
+                name, redirect_url: redirectUrl, owner: session?.username || ''
+            });
+            resultBox.style.display = 'block';
             if (data && data.success) {
-                alert(`Key mới: ${data.key}\nHết hạn: ${data.expires_at}`);
+                resultBox.className = 'result-box result-success';
+                resultBox.innerHTML = `
+                    <strong>✅ Tạo key & rút gọn thành công!</strong><br>
+                    Key: <code style="color:var(--success)">${data.key}</code><br>
+                    Link rút gọn: <span class="short-url" onclick="copyToClipboard('${data.short_url}')">${data.short_url}</span>
+                    <small style="display:block;margin-top:6px;color:var(--text-muted);">Gửi link này cho người dùng. Họ mở link → vào tab Cấp phép IP → nhập key.</small>
+                `;
                 loadKeys();
-            } else { alert('Lỗi: ' + (data?.error || 'Không tạo được key')); }
-        } catch (e) { alert('Lỗi kết nối server'); }
+                loadRecentKeys();
+            } else {
+                resultBox.className = 'result-box result-error';
+                resultBox.textContent = '❌ ' + (data?.error || 'Lỗi') + (data?.raw ? ` (API: ${data.raw})` : '');
+            }
+        } else {
+            // Local mode
+            const keysData = loadLocalKeys();
+            const session = getSession();
+            const key = generateKey();
+            const now = new Date();
+            const expires = new Date(now.getTime() + KEY_DURATION_DAYS * 86400000);
+
+            // Rút gọn link chứa key
+            const fullUrl = redirectUrl.includes('?key=') ? redirectUrl : redirectUrl + (redirectUrl.includes('?') ? '&' : '?') + 'key=' + key;
+            let shortUrl = '';
+            try {
+                const apiResp = await fetch(SHORTEN_API + encodeURIComponent(fullUrl));
+                shortUrl = (await apiResp.text()).trim();
+            } catch (e) {
+                shortUrl = fullUrl; // fallback
+            }
+
+            if (!shortUrl.startsWith('http')) shortUrl = fullUrl;
+
+            keysData[key] = {
+                name: name || '',
+                owner: session?.username || '',
+                created_at: now.toISOString(),
+                expires_at: expires.toISOString(),
+                authorized_ip: null,
+                short_url: shortUrl,
+            };
+            saveLocalKeys(keysData);
+
+            resultBox.style.display = 'block';
+            resultBox.className = 'result-box result-success';
+            resultBox.innerHTML = `
+                <strong>✅ Tạo key & rút gọn thành công!</strong><br>
+                Key: <code style="color:var(--success)">${key}</code><br>
+                Link rút gọn: <span class="short-url" onclick="copyToClipboard('${shortUrl}')">${shortUrl}</span>
+                <small style="display:block;margin-top:6px;color:var(--text-muted);">Gửi link này cho người dùng. Họ mở link → vào tab Cấp phép IP → nhập key.</small>
+            `;
+            loadKeys();
+            loadRecentKeys();
+        }
+    } catch (e) {
+        resultBox.style.display = 'block';
+        resultBox.className = 'result-box result-error';
+        resultBox.textContent = '❌ Lỗi: ' + e.message + '\n\nNếu là lỗi CORS, hãy dùng Server mode (Cloudflare Worker).';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Tạo key &amp; rút gọn';
+    }
+}
+
+// ==================== RECENT KEYS ====================
+function loadRecentKeys() {
+    if (hasServer()) {
+        // Server mode: load from server
+        apiCall('/api/list-keys').then(data => {
+            if (data && data.keys) renderRecentKeys(data.keys.slice(0, 10));
+        }).catch(() => {});
     } else {
         const keysData = loadLocalKeys();
-        const key = generateKey();
-        const now = new Date();
-        const expires = new Date(now.getTime() + KEY_DURATION_DAYS * 86400000);
-        keysData[key] = {
-            name: name || '', created_at: now.toISOString(), expires_at: expires.toISOString(),
-            authorized_ip: null, shorten_count: 0, shorten_history: [],
-        };
-        saveLocalKeys(keysData);
-        alert(`Key mới: ${key}\nHết hạn: ${expires.toLocaleString('vi-VN')}`);
-        loadKeys();
+        const session = getSession();
+        const all = Object.keys(keysData)
+            .filter(k => !session || keysData[k].owner === session.username || keysData[k].owner === undefined)
+            .map(k => keyInfoLocal(k, keysData))
+            .filter(Boolean)
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+            .slice(0, 10);
+        renderRecentKeys(all);
     }
+}
+
+function renderRecentKeys(keys) {
+    const el = document.getElementById('recentKeys');
+    if (!keys || keys.length === 0) {
+        el.innerHTML = '<p class="empty-text">Chưa có key nào được tạo.</p>';
+        return;
+    }
+    el.innerHTML = keys.map(k => `
+        <div class="recent-key-item">
+            <div class="rk-key">🔑 ${k.key}</div>
+            ${k.short_url ? `<div class="rk-link" onclick="copyToClipboard('${k.short_url}')">⚡ ${k.short_url}</div>` : ''}
+            <div class="rk-info">📝 ${k.name || 'Không tên'} · ⏰ ${k.remaining_text} · ${k.expired ? 'Hết hạn' : 'Hoạt động'}</div>
+            <div class="rk-actions">
+                <button class="btn btn-secondary btn-sm" onclick="copyToClipboard('${k.key}')">Copy key</button>
+                ${k.short_url ? `<button class="btn btn-secondary btn-sm" onclick="copyToClipboard('${k.short_url}')">Copy link</button>` : ''}
+            </div>
+        </div>
+    `).join('');
 }
 
 // ==================== DELETE KEY ====================
@@ -207,8 +406,7 @@ async function deleteKey(key) {
     if (hasServer()) {
         try {
             const data = await apiCall('/api/delete-key', 'POST', { key });
-            if (data && data.success) loadKeys();
-            else alert('Lỗi: ' + (data?.error || 'Không xoá được'));
+            if (data && data.success) { loadKeys(); loadRecentKeys(); }
         } catch (e) { alert('Lỗi kết nối server'); }
     } else {
         const keysData = loadLocalKeys();
@@ -218,131 +416,8 @@ async function deleteKey(key) {
         delete keysData[key];
         saveLocalKeys(keysData);
         loadKeys();
+        loadRecentKeys();
     }
-}
-
-// ==================== SHORTEN LINK ====================
-async function shortenLink() {
-    const key = document.getElementById('shortenKey').value.trim();
-    const url = document.getElementById('originalUrl').value.trim();
-    const btn = document.getElementById('shortenBtn');
-    const resultBox = document.getElementById('shortenResult');
-
-    if (!key || !url) {
-        resultBox.style.display = 'block';
-        resultBox.className = 'result-box result-error';
-        resultBox.textContent = 'Vui lòng nhập đầy đủ key và link.';
-        return;
-    }
-
-    btn.disabled = true;
-    btn.innerHTML = '<span>Đang rút gọn...</span>';
-
-    try {
-        if (hasServer()) {
-            // Server mode: server gọi API rút gọn
-            const data = await apiCall('/api/shorten', 'POST', { key, url });
-            resultBox.style.display = 'block';
-            if (data && data.success) {
-                resultBox.className = 'result-box result-success';
-                resultBox.innerHTML = `<strong>✅ Thành công!</strong><span class="short-url" onclick="copyToClipboard('${data.short_url}')">${data.short_url}</span><small style="display:block;margin-top:6px;color:var(--text-muted);">Nhấn vào link để copy</small>`;
-            } else {
-                resultBox.className = 'result-box result-error';
-                resultBox.textContent = '❌ ' + (data?.error || 'Lỗi') + (data?.raw ? ` (API: ${data.raw})` : '');
-            }
-        } else {
-            // Local mode: client gọi API link4m.co trực tiếp (CORS permitting)
-            const keysData = loadLocalKeys();
-            const info = keyInfoLocal(key, keysData);
-            if (!info) {
-                resultBox.style.display = 'block';
-                resultBox.className = 'result-box result-error';
-                resultBox.textContent = '❌ Key không hợp lệ.';
-                btn.disabled = false;
-                btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Rút gọn';
-                return;
-            }
-            if (info.expired) {
-                resultBox.style.display = 'block';
-                resultBox.className = 'result-box result-error';
-                resultBox.textContent = '❌ Key đã hết hạn.';
-                btn.disabled = false;
-                btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Rút gọn';
-                return;
-            }
-
-            // Gọi API rút gọn trực tiếp
-            const apiResp = await fetch(SHORTEN_API + encodeURIComponent(url));
-            const shortUrl = (await apiResp.text()).trim();
-
-            if (shortUrl.startsWith('http')) {
-                // Lưu history
-                keysData[key].shorten_count = info.shorten_count + 1;
-                keysData[key].shorten_history.unshift({
-                    original: url, shortened: shortUrl, time: new Date().toISOString(),
-                });
-                keysData[key].shorten_history = keysData[key].shorten_history.slice(0, 50);
-                saveLocalKeys(keysData);
-
-                resultBox.style.display = 'block';
-                resultBox.className = 'result-box result-success';
-                resultBox.innerHTML = `<strong>✅ Thành công!</strong><span class="short-url" onclick="copyToClipboard('${shortUrl}')">${shortUrl}</span><small style="display:block;margin-top:6px;color:var(--text-muted);">Nhấn vào link để copy</small>`;
-            } else {
-                resultBox.style.display = 'block';
-                resultBox.className = 'result-box result-error';
-                resultBox.textContent = '❌ API trả về: ' + shortUrl;
-            }
-        }
-    } catch (e) {
-        resultBox.style.display = 'block';
-        resultBox.className = 'result-box result-error';
-        resultBox.textContent = '❌ Lỗi: ' + e.message + '\n\nNếu là lỗi CORS, hãy dùng Server mode (Cloudflare Worker).';
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Rút gọn';
-    }
-}
-
-// ==================== LOAD HISTORY ====================
-async function loadHistory() {
-    const key = document.getElementById('historyKey').value.trim();
-    const listEl = document.getElementById('historyList');
-    if (!key) { listEl.innerHTML = '<p class="empty-text">Vui lòng nhập key.</p>'; return; }
-
-    listEl.innerHTML = '<p class="empty-text">Đang tải...</p>';
-
-    try {
-        if (hasServer()) {
-            const data = await apiCall(`/api/stats/${key}`);
-            if (data && !data.error) {
-                renderHistory(data.shorten_history || []);
-            } else {
-                listEl.innerHTML = `<p class="empty-text">❌ ${data?.error || 'Không tìm thấy key'}</p>`;
-            }
-        } else {
-            const keysData = loadLocalKeys();
-            const info = keyInfoLocal(key, keysData);
-            if (!info) { listEl.innerHTML = '<p class="empty-text">❌ Key không hợp lệ.</p>'; return; }
-            renderHistory(info.shorten_history);
-        }
-    } catch (e) {
-        listEl.innerHTML = '<p class="empty-text">❌ Lỗi kết nối</p>';
-    }
-}
-
-function renderHistory(history) {
-    const listEl = document.getElementById('historyList');
-    if (history.length === 0) {
-        listEl.innerHTML = '<p class="empty-text">Chưa có link nào được rút gọn.</p>';
-        return;
-    }
-    listEl.innerHTML = history.map(h => `
-        <div class="history-item">
-            <div class="h-original">🔗 ${h.original}</div>
-            <div class="h-short" onclick="copyToClipboard('${h.shortened}')">⚡ ${h.shortened}</div>
-            <div class="h-time">⏰ ${new Date(h.time).toLocaleString('vi-VN')}</div>
-        </div>
-    `).join('');
 }
 
 // ==================== AUTHORIZE IP ====================
@@ -374,7 +449,6 @@ async function authorizeIP() {
                 resultBox.textContent = '❌ ' + (data?.error || 'Không thể cấp phép');
             }
         } else {
-            // Local mode
             const keysData = loadLocalKeys();
             const info = keyInfoLocal(key, keysData);
             if (!info) {
@@ -393,7 +467,6 @@ async function authorizeIP() {
                 btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 5.5m0 0l5 5L22 9l-5-5"/></svg> Cấp phép IP';
                 return;
             }
-
             const ip = document.getElementById('authUserIP').textContent;
             keysData[key].authorized_ip = ip;
             saveLocalKeys(keysData);
@@ -425,24 +498,18 @@ function updateInfoAfterAuth(data) {
     document.getElementById('expireDate').textContent = 'Hết hạn: ' + data.expires_at;
 }
 
-// ==================== CHECK IP ====================
-async function checkIP() {
-    const ip = document.getElementById('checkIPInput').value.trim();
-    const token = document.getElementById('checkToken').value.trim();
+// ==================== TEST CHECK IP (API test) ====================
+async function testCheckIP() {
+    const ip = document.getElementById('testCheckIP').value.trim();
+    const token = document.getElementById('adminTokenInput').value.trim();
     const resultBox = document.getElementById('checkResult');
 
     if (!ip || !token) {
         resultBox.style.display = 'block';
         resultBox.className = 'result-box result-error';
-        resultBox.textContent = 'Vui lòng nhập IP và token.';
+        resultBox.textContent = 'Nhập IP và token.';
         return;
     }
-
-    const server = getApiServer();
-    const exampleFull = server
-        ? `${server.replace(/\/+$/, '')}/api/check-ip/${ip}?token=${token}`
-        : `/api/check-ip/${ip}?token=${token}`;
-    document.getElementById('apiExampleFull').textContent = exampleFull;
 
     if (hasServer()) {
         try {
@@ -450,10 +517,10 @@ async function checkIP() {
             resultBox.style.display = 'block';
             if (data && data.authorized) {
                 resultBox.className = 'result-box result-success';
-                resultBox.innerHTML = `<strong>✅ IP đã được cấp phép!</strong><br>IP: <code style="color:var(--success)">${data.ip}</code><br>Key: <code style="color:var(--success)">${data.key}</code><br>Còn lại: ${data.remaining || 'N/A'}`;
+                resultBox.innerHTML = `<strong>✅ IP đã cấp phép!</strong><br>IP: ${data.ip}<br>Key: ${data.key}<br>Còn lại: ${data.remaining || 'N/A'}`;
             } else {
                 resultBox.className = 'result-box result-error';
-                resultBox.innerHTML = `<strong>❌ IP chưa được cấp phép</strong><br>Lý do: ${data?.reason || 'unknown'}${data?.error ? '<br>Token: ' + data.error : ''}`;
+                resultBox.innerHTML = `<strong>❌ Chưa cấp phép</strong><br>Lý do: ${data?.reason || 'unknown'}${data?.error ? ' / Token: ' + data.error : ''}`;
             }
         } catch (e) {
             resultBox.style.display = 'block';
@@ -461,7 +528,6 @@ async function checkIP() {
             resultBox.textContent = '❌ Lỗi kết nối server';
         }
     } else {
-        // Local mode: check localStorage
         const authIPs = loadLocalAuthIPs();
         const keysData = loadLocalKeys();
         resultBox.style.display = 'block';
@@ -470,14 +536,14 @@ async function checkIP() {
             const info = keyInfoLocal(key, keysData);
             if (info && !info.expired) {
                 resultBox.className = 'result-box result-success';
-                resultBox.innerHTML = `<strong>✅ IP đã được cấp phép (local)!</strong><br>IP: <code style="color:var(--success)">${ip}</code><br>Key: <code style="color:var(--success)">${key}</code><br>Còn lại: ${info.remaining_text}`;
+                resultBox.innerHTML = `<strong>✅ IP đã cấp phép (local)!</strong><br>IP: ${ip}<br>Key: ${key}<br>Còn lại: ${info.remaining_text}`;
             } else {
                 resultBox.className = 'result-box result-error';
-                resultBox.innerHTML = `<strong>❌ Key đã hết hạn</strong>`;
+                resultBox.innerHTML = `<strong>❌ Key hết hạn</strong>`;
             }
         } else {
             resultBox.className = 'result-box result-error';
-            resultBox.innerHTML = `<strong>❌ IP chưa được cấp phép (local)</strong>`;
+            resultBox.innerHTML = `<strong>❌ Chưa cấp phép (local)</strong>`;
         }
     }
 }
@@ -488,11 +554,12 @@ function saveApiServer() {
     localStorage.setItem(LS_API_SERVER, val);
     const statusEl = document.getElementById('apiServerStatus');
     if (val) {
-        statusEl.innerHTML = `<span style="color:var(--success)">✅ Đã lưu. Server: ${val}</span>`;
+        statusEl.innerHTML = `<span style="color:var(--success)">✅ Server: ${val}</span>`;
     } else {
-        statusEl.innerHTML = `<span style="color:var(--warning)">⚠️ Đã xoá. Đang dùng chế độ localStorage.</span>`;
+        statusEl.innerHTML = `<span style="color:var(--warning)">⚠️ Chế độ localStorage.</span>`;
     }
     loadKeys();
+    loadRecentKeys();
 }
 
 function loadApiServerInput() {
@@ -502,7 +569,23 @@ function loadApiServerInput() {
     if (val) {
         statusEl.innerHTML = `<span style="color:var(--success)">✅ Server: ${val}</span>`;
     } else {
-        statusEl.innerHTML = `<span style="color:var(--text-muted)">Chế độ localStorage (không cần server).</span>`;
+        statusEl.innerHTML = `<span style="color:var(--text-muted)">Chế độ localStorage.</span>`;
+    }
+}
+
+// ==================== URL KEY AUTO-FILL ====================
+function checkUrlForKey() {
+    const params = new URLSearchParams(window.location.search);
+    const key = params.get('key');
+    if (key) {
+        // Tự động chuyển sang tab Cấp phép IP và điền key
+        switchTab('authorize');
+        document.getElementById('authKey').value = key;
+        // Hiển thị thông báo
+        const resultBox = document.getElementById('authResult');
+        resultBox.style.display = 'block';
+        resultBox.className = 'result-box result-success';
+        resultBox.innerHTML = `<strong>🔑 Đã nhận key từ link!</strong><br>Key: <code style="color:var(--success)">${key}</code><br>Nhấn "Cấp phép IP" để ghi nhận IP máy bạn.`;
     }
 }
 
@@ -518,6 +601,12 @@ function copyToClipboard(text) {
 }
 
 // ==================== INIT ====================
-loadApiServerInput();
-fetchUserIP();
-loadKeys();
+(function init() {
+    const session = getSession();
+    if (session) {
+        showApp();
+    } else {
+        document.getElementById('authOverlay').style.display = 'flex';
+        document.getElementById('mainApp').style.display = 'none';
+    }
+})();

@@ -34,6 +34,56 @@ body {
 
 .app-container { max-width: 1200px; margin: 0 auto; padding: 0 20px 40px; }
 
+/* ==================== AUTH OVERLAY ==================== */
+.auth-overlay {
+    position: fixed; inset: 0;
+    background: var(--bg-primary);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999;
+    padding: 20px;
+}
+
+.auth-card {
+    width: 100%; max-width: 420px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 36px 32px;
+}
+
+.auth-logo {
+    width: 64px; height: 64px;
+    margin: 0 auto 20px;
+    background: linear-gradient(135deg, var(--accent), #7c5cff);
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+}
+
+.auth-card h2 {
+    text-align: center; font-size: 24px; font-weight: 700; margin-bottom: 4px;
+}
+
+.auth-sub {
+    text-align: center; font-size: 14px; color: var(--text-secondary); margin-bottom: 24px;
+}
+
+.auth-tabs {
+    display: flex; gap: 4px; margin-bottom: 20px;
+    background: var(--bg-secondary); border-radius: var(--radius-sm); padding: 4px;
+}
+
+.auth-tab {
+    flex: 1; padding: 10px; border: none; border-radius: 6px;
+    background: transparent; color: var(--text-secondary);
+    font-size: 14px; font-weight: 500; cursor: pointer; transition: var(--transition);
+    font-family: inherit;
+}
+
+.auth-tab.active {
+    background: var(--accent); color: #fff;
+}
+
 /* ==================== HEADER ==================== */
 .app-header {
     display: flex; justify-content: space-between; align-items: center;
@@ -47,13 +97,15 @@ body {
 }
 .app-header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
 .header-subtitle { font-size: 13px; color: var(--text-secondary); }
-.status-badge {
-    display: flex; align-items: center; gap: 8px; padding: 8px 16px;
-    background: var(--success-light); border: 1px solid rgba(46, 213, 115, 0.3);
-    border-radius: 100px; font-size: 13px; font-weight: 500; color: var(--success);
+
+.user-badge {
+    display: flex; align-items: center; gap: 12px;
 }
-.status-dot { width: 8px; height: 8px; background: var(--success); border-radius: 50%; animation: pulse 2s infinite; }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.user-badge span {
+    font-size: 14px; font-weight: 500; color: var(--text-primary);
+    padding: 8px 14px; background: var(--bg-card); border-radius: 100px;
+    border: 1px solid var(--border-color);
+}
 
 /* ==================== TABS ==================== */
 .tab-nav {
@@ -118,6 +170,7 @@ body {
 .badge-active { background: var(--success-light); color: var(--success); }
 .badge-expired { background: var(--danger-light); color: var(--danger); }
 .key-cell { font-family: 'Courier New', monospace; font-size: 13px; color: var(--accent); }
+.link-cell { font-family: 'Courier New', monospace; font-size: 12px; color: var(--success); }
 
 /* ==================== BUTTONS ==================== */
 .btn {
@@ -148,17 +201,17 @@ body {
 .form-input::placeholder { color: var(--text-muted); }
 .mt-2 { margin-top: 8px; }
 
-/* ==================== LINK TAB ==================== */
-.link-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+/* ==================== LINK CREATE TAB ==================== */
+.link-create-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 @media (max-width: 768px) {
-    .link-container { grid-template-columns: 1fr; }
+    .link-create-container { grid-template-columns: 1fr; }
     .authorize-container { grid-template-columns: 1fr !important; }
 }
-.link-form-card, .link-history-card {
+.create-card {
     background: var(--bg-card); border: 1px solid var(--border-color);
     border-radius: var(--radius); padding: 24px;
 }
-.link-form-card h2, .link-history-card h2 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+.create-card h2 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
 .form-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; }
 .result-box { margin-top: 16px; padding: 16px; border-radius: var(--radius-sm); font-size: 14px; animation: fadeIn 0.3s ease; }
 .result-success { background: var(--success-light); border: 1px solid rgba(46, 213, 115, 0.3); color: var(--success); }
@@ -170,15 +223,24 @@ body {
 }
 .result-box .short-url:hover { text-decoration: underline; }
 
-/* ==================== HISTORY ==================== */
-.history-list { max-height: 400px; overflow-y: auto; }
-.history-item {
-    padding: 12px 14px; background: var(--bg-secondary); border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm); margin-bottom: 8px; font-size: 13px;
+/* ==================== RECENT KEYS ==================== */
+.recent-keys-list { max-height: 500px; overflow-y: auto; }
+.recent-key-item {
+    padding: 14px; background: var(--bg-secondary); border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm); margin-bottom: 10px;
 }
-.history-item .h-original { color: var(--text-muted); word-break: break-all; font-size: 12px; }
-.history-item .h-short { color: var(--accent); font-family: 'Courier New', monospace; margin-top: 4px; word-break: break-all; }
-.history-item .h-time { color: var(--text-muted); font-size: 11px; margin-top: 4px; }
+.recent-key-item .rk-key {
+    font-family: 'Courier New', monospace; font-size: 13px; color: var(--accent);
+    font-weight: 600;
+}
+.recent-key-item .rk-link {
+    display: block; margin-top: 6px; font-family: 'Courier New', monospace; font-size: 12px;
+    color: var(--success); word-break: break-all; cursor: pointer; padding: 6px 10px;
+    background: var(--bg-primary); border-radius: 6px;
+}
+.recent-key-item .rk-link:hover { text-decoration: underline; }
+.recent-key-item .rk-info { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+.recent-key-item .rk-actions { display: flex; gap: 8px; margin-top: 10px; }
 .empty-text { color: var(--text-muted); font-style: italic; text-align: center; padding: 20px; }
 
 /* ==================== AUTHORIZE TAB ==================== */
@@ -195,7 +257,7 @@ body {
 
 /* ==================== API HINT ==================== */
 .api-hint {
-    margin-top: 20px; padding: 16px; background: var(--bg-secondary);
+    margin-top: 16px; padding: 16px; background: var(--bg-secondary);
     border: 1px dashed var(--border-color); border-radius: var(--radius-sm);
 }
 .api-hint label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 8px; }
@@ -203,10 +265,11 @@ body {
     display: block; padding: 8px 12px; background: var(--bg-primary); border-radius: 6px;
     font-size: 13px; color: var(--accent); word-break: break-all; font-family: 'Courier New', monospace;
 }
-.api-example-text { margin-top: 8px; font-size: 12px; color: var(--text-secondary); }
-.api-example-text code { display: inline; padding: 2px 6px; font-size: 12px; }
-.api-return { margin-top: 8px; font-size: 12px; color: var(--text-secondary); }
-.api-return code { display: inline; padding: 2px 6px; font-size: 12px; }
+.code-block {
+    display: block; padding: 12px; background: var(--bg-primary); border-radius: 6px;
+    font-size: 12px; color: var(--text-primary); font-family: 'Courier New', monospace;
+    white-space: pre-wrap; word-break: break-all; margin-top: 8px;
+}
 
 /* ==================== FOOTER ==================== */
 .app-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border-color); text-align: center; font-size: 13px; color: var(--text-muted); }
