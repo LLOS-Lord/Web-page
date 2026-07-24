@@ -1,37 +1,31 @@
-# Proxy Key Manager v2
+# Proxy Key Manager v3
 
-## Flow hoạt động
-
-```
-Admin đăng nhập → Tạo key → Web tự rút gọn link chứa key
-  → Admin copy link rút gọn gửi cho user
-  → User mở link → web tự lấy key từ URL → tab Cấp phép IP
-  → User nhập key → IP máy user được ghi nhận
-  → Proxy (máy khác) gọi API check-ip → true/false
-```
-
-## Cấu trúc
+## Flow
 
 ```
-proxy-key-pages/
-├── index.html       # Frontend (GitHub Pages)
-├── styles.css       # Giao diện
-├── app.js           # Logic (auth + key + shorten + authorize)
-├── api/worker.js    # Cloudflare Worker backend
-├── wrangler.toml    # Config Worker
-└── README.md
+Admin đăng nhập → Nhấn "Tạo key" → Key tự tạo + link tự rút gọn
+  → Copy link rút gọn gửi cho user
+  → User mở link → web tự lấy key → tab Cấp phép IP
+  → User nhập key → IP máy user được ghi
+  → Proxy gọi API check-ip → true/false
 ```
+
+## Phân quyền
+
+- **Tài khoản đầu tiên** đăng ký = Admin (tự động)
+- Admin thấy: badge "ADMIN", phần cấu hình API Server + API check-ip (tab Thông tin)
+- Người dùng thường: chỉ thấy 3 tab, không thấy phần API
 
 ## Deploy
 
-### 1. GitHub Pages
+### GitHub Pages
 ```bash
-git init && git add . && git commit -m "Proxy Key Manager v2"
+git init && git add . && git commit -m "Proxy Key Manager v3"
 git push origin main
-# Settings → Pages → Source: main → Web live
+# Settings → Pages → Source: main
 ```
 
-### 2. Cloudflare Worker
+### Cloudflare Worker
 ```bash
 npm install -g wrangler
 wrangler login
@@ -40,25 +34,11 @@ wrangler kv namespace create PKM_DATA
 wrangler deploy
 ```
 
-### 3. Kết nối
-Mở web → đăng ký tài khoản → tab Thông tin → nhập Worker URL → Lưu
+### Kết nối
+Admin đăng nhập → tab Thông tin → nhập Worker URL → Lưu
 
-## API cho Proxy
-
+## API cho Proxy (admin only)
 ```
 GET https://<worker>/api/check-ip/<ip>?token=admin
-→ {"authorized": true}  hoặc  {"authorized": false}
+→ {"authorized": true/false}
 ```
-
-```python
-import requests
-def is_authorized(ip):
-    r = requests.get(f"https://your-worker.workers.dev/api/check-ip/{ip}", params={"token": "admin"}, timeout=5)
-    return r.json().get("authorized", False)
-```
-
-## Tabs
-
-1. **Thông tin** — Đồng hồ, IP, key đang dùng, thời gian còn lại, danh sách key, cấu hình server
-2. **Tạo key & Link** — Tạo key → tự rút gọn link chứa key → copy link gửi cho user
-3. **Cấp phép IP** — User nhập key → IP được ghi → proxy check via API

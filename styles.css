@@ -39,50 +39,30 @@ body {
     position: fixed; inset: 0;
     background: var(--bg-primary);
     display: flex; align-items: center; justify-content: center;
-    z-index: 9999;
-    padding: 20px;
+    z-index: 9999; padding: 20px;
 }
-
 .auth-card {
     width: 100%; max-width: 420px;
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-    padding: 36px 32px;
+    background: var(--bg-card); border: 1px solid var(--border-color);
+    border-radius: var(--radius); padding: 36px 32px;
 }
-
 .auth-logo {
-    width: 64px; height: 64px;
-    margin: 0 auto 20px;
+    width: 64px; height: 64px; margin: 0 auto 20px;
     background: linear-gradient(135deg, var(--accent), #7c5cff);
-    border-radius: 16px;
-    display: flex; align-items: center; justify-content: center;
-    color: #fff;
+    border-radius: 16px; display: flex; align-items: center; justify-content: center; color: #fff;
 }
-
-.auth-card h2 {
-    text-align: center; font-size: 24px; font-weight: 700; margin-bottom: 4px;
-}
-
-.auth-sub {
-    text-align: center; font-size: 14px; color: var(--text-secondary); margin-bottom: 24px;
-}
-
+.auth-card h2 { text-align: center; font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+.auth-sub { text-align: center; font-size: 14px; color: var(--text-secondary); margin-bottom: 24px; }
 .auth-tabs {
     display: flex; gap: 4px; margin-bottom: 20px;
     background: var(--bg-secondary); border-radius: var(--radius-sm); padding: 4px;
 }
-
 .auth-tab {
     flex: 1; padding: 10px; border: none; border-radius: 6px;
     background: transparent; color: var(--text-secondary);
-    font-size: 14px; font-weight: 500; cursor: pointer; transition: var(--transition);
-    font-family: inherit;
+    font-size: 14px; font-weight: 500; cursor: pointer; transition: var(--transition); font-family: inherit;
 }
-
-.auth-tab.active {
-    background: var(--accent); color: #fff;
-}
+.auth-tab.active { background: var(--accent); color: #fff; }
 
 /* ==================== HEADER ==================== */
 .app-header {
@@ -97,14 +77,17 @@ body {
 }
 .app-header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
 .header-subtitle { font-size: 13px; color: var(--text-secondary); }
-
-.user-badge {
-    display: flex; align-items: center; gap: 12px;
-}
+.user-badge { display: flex; align-items: center; gap: 10px; }
 .user-badge span {
     font-size: 14px; font-weight: 500; color: var(--text-primary);
-    padding: 8px 14px; background: var(--bg-card); border-radius: 100px;
-    border: 1px solid var(--border-color);
+    padding: 8px 14px; background: var(--bg-card); border-radius: 100px; border: 1px solid var(--border-color);
+}
+.admin-tag {
+    background: var(--warning-light) !important;
+    color: var(--warning) !important;
+    border: 1px solid rgba(255, 165, 2, 0.3) !important;
+    font-size: 11px !important; font-weight: 700 !important;
+    padding: 4px 10px !important;
 }
 
 /* ==================== TABS ==================== */
@@ -186,6 +169,7 @@ body {
 .btn-danger { background: var(--danger-light); color: var(--danger); }
 .btn-danger:hover { background: var(--danger); color: #fff; }
 .btn-sm { padding: 6px 14px; font-size: 13px; }
+.btn-lg { padding: 16px 24px; font-size: 16px; }
 .btn-block { width: 100%; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
 
@@ -199,10 +183,9 @@ body {
 }
 .form-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
 .form-input::placeholder { color: var(--text-muted); }
-.mt-2 { margin-top: 8px; }
 
 /* ==================== LINK CREATE TAB ==================== */
-.link-create-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.link-create-container { display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px; }
 @media (max-width: 768px) {
     .link-create-container { grid-template-columns: 1fr; }
     .authorize-container { grid-template-columns: 1fr !important; }
@@ -224,27 +207,26 @@ body {
 .result-box .short-url:hover { text-decoration: underline; }
 
 /* ==================== RECENT KEYS ==================== */
-.recent-keys-list { max-height: 500px; overflow-y: auto; }
+.recent-keys-list { max-height: 600px; overflow-y: auto; }
 .recent-key-item {
     padding: 14px; background: var(--bg-secondary); border: 1px solid var(--border-color);
     border-radius: var(--radius-sm); margin-bottom: 10px;
 }
 .recent-key-item .rk-key {
-    font-family: 'Courier New', monospace; font-size: 13px; color: var(--accent);
-    font-weight: 600;
+    font-family: 'Courier New', monospace; font-size: 14px; color: var(--accent); font-weight: 600;
 }
 .recent-key-item .rk-link {
-    display: block; margin-top: 6px; font-family: 'Courier New', monospace; font-size: 12px;
-    color: var(--success); word-break: break-all; cursor: pointer; padding: 6px 10px;
+    display: block; margin-top: 8px; font-family: 'Courier New', monospace; font-size: 12px;
+    color: var(--success); word-break: break-all; cursor: pointer; padding: 8px 10px;
     background: var(--bg-primary); border-radius: 6px;
 }
 .recent-key-item .rk-link:hover { text-decoration: underline; }
-.recent-key-item .rk-info { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
-.recent-key-item .rk-actions { display: flex; gap: 8px; margin-top: 10px; }
+.recent-key-item .rk-info { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+.recent-key-item .rk-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .empty-text { color: var(--text-muted); font-style: italic; text-align: center; padding: 20px; }
 
 /* ==================== AUTHORIZE TAB ==================== */
-.authorize-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.authorize-container { display: grid; grid-template-columns: 1fr; gap: 20px; max-width: 500px; margin: 0 auto; }
 .authorize-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 24px; }
 .authorize-card h2 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
 .ip-display { margin-bottom: 20px; }
@@ -255,7 +237,7 @@ body {
 .ip-box label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
 .ip-value { font-size: 24px; font-weight: 800; color: var(--accent); margin-top: 4px; font-family: 'Courier New', monospace; }
 
-/* ==================== API HINT ==================== */
+/* ==================== API HINT (admin only) ==================== */
 .api-hint {
     margin-top: 16px; padding: 16px; background: var(--bg-secondary);
     border: 1px dashed var(--border-color); border-radius: var(--radius-sm);
@@ -265,11 +247,17 @@ body {
     display: block; padding: 8px 12px; background: var(--bg-primary); border-radius: 6px;
     font-size: 13px; color: var(--accent); word-break: break-all; font-family: 'Courier New', monospace;
 }
+.api-return { margin-top: 8px; font-size: 12px; color: var(--text-secondary); }
+.api-return code { display: inline; padding: 2px 6px; font-size: 12px; }
 .code-block {
     display: block; padding: 12px; background: var(--bg-primary); border-radius: 6px;
     font-size: 12px; color: var(--text-primary); font-family: 'Courier New', monospace;
     white-space: pre-wrap; word-break: break-all; margin-top: 8px;
 }
+
+/* ==================== ADMIN ONLY ==================== */
+.admin-only { display: none; }
+.admin-only.visible { display: block; }
 
 /* ==================== FOOTER ==================== */
 .app-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border-color); text-align: center; font-size: 13px; color: var(--text-muted); }

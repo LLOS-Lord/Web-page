@@ -1,9 +1,9 @@
-/* ==================== Proxy Key Manager v2 ==================== *
- * Flow mới:
- *   1. Admin đăng nhập/đăng ký
- *   2. Tab "Tạo key & Link": tạo key → tự rút gọn link chứa key → gửi link cho user
- *   3. User nhận link → mở link → web tự lấy key từ URL → tab Cấp phép IP → nhập key → IP được ghi
- *   4. Proxy (máy khác) gọi API check-ip → true/false
+/* ==================== Proxy Key Manager v3 ==================== *
+ * Thay đổi v3:
+ *   - Tạo key: 1 nút bấm, không cần nhập tên
+ *   - Hiển thị key + link rút gọn đã tạo
+ *   - Xoá phần API khỏi tab người dùng (chỉ admin thấy trong tab Thông tin)
+ *   - Phân quyền: tài khoản đầu tiên = admin
  */
 
 // ==================== CONFIG ====================
@@ -67,14 +67,13 @@ async function doAuth() {
     }
 
     if (hasServer()) {
-        // Server mode
         try {
             const endpoint = authMode === 'register' ? '/api/register' : '/api/login';
             const payload = authMode === 'register' ? { username, password, name } : { username, password };
             const data = await apiCall(endpoint, 'POST', payload);
             resultBox.style.display = 'block';
             if (data && data.success) {
-                setSession({ username: data.username, name: data.name || username, token: data.token || '' });
+                setSession({ username: data.username, name: data.name || username, isAdmin: data.is_admin || false, token: data.token || '' });
                 showApp();
             } else {
                 resultBox.className = 'result-box result-error';
@@ -86,7 +85,6 @@ async function doAuth() {
             resultBox.textContent = '❌ Lỗi kết nối server';
         }
     } else {
-        // Local mode
         const users = loadUsers();
         resultBox.style.display = 'block';
 
@@ -96,19 +94,23 @@ async function doAuth() {
                 resultBox.textContent = '❌ Tên đăng nhập đã tồn tại.';
                 return;
             }
-            users[username] = { name: name || username, password: btoa(password) };
+            // First user = admin
+            const isFirstUser = Object.keys(users).length === 0;
+            users[username] = { name: name || username, password: btoa(password), isAdmin: isFirstUser };
             saveUsers(users);
-            setSession({ username, name: name || username });
+            setSession({ username, name: name || username, isAdmin: isFirstUser });
             resultBox.className = 'result-box result-success';
-            resultBox.textContent = '✅ Đăng ký thành công!';
-            setTimeout(() => showApp(), 800);
+            resultBox.textContent = isFirstUser
+                ? '✅ Đăng ký thành công! Bạn là Admin (tài khoản đầu tiên).'
+                : '✅ Đăng ký thành công!';
+            setTimeout(() => showApp(), 1000);
         } else {
             if (!users[username] || users[username].password !== btoa(password)) {
                 resultBox.className = 'result-box result-error';
                 resultBox.textContent = '❌ Sai tên đăng nhập hoặc mật khẩu.';
                 return;
             }
-            setSession({ username, name: users[username].name });
+            setSession({ username, name: users[username].name, isAdmin: users[username].isAdmin || false });
             resultBox.className = 'result-box result-success';
             resultBox.textContent = '✅ Đăng nhập thành công!';
             setTimeout(() => showApp(), 600);
@@ -131,6 +133,16 @@ function showApp() {
     document.getElementById('authOverlay').style.display = 'none';
     document.getElementById('mainApp').style.display = 'block';
     document.getElementById('userName').textContent = session.name || session.username;
+
+    // Show admin-only sections
+    if (session.isAdmin) {
+        document.getElementById('adminBadge').style.display = 'inline-block';
+        document.querySelectorAll('.admin-only').forEach(el => el.classList.add('visible'));
+    } else {
+        document.getElementById('adminBadge').style.display = 'none';
+        document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('visible'));
+    }
+
     loadApiServerInput();
     fetchUserIP();
     loadKeys();
@@ -180,7 +192,7 @@ function keyInfoLocal(key, keysData) {
     const hours = Math.floor((remainingSec % 86400) / 3600);
     const mins = Math.floor((remainingSec % 3600) / 60);
     return {
-        key, name: k.name || '', owner: k.owner || '',
+        key, owner: k.owner || '',
         created_at: k.created_at, expires_at: k.expires_at,
         remaining_seconds: remainingSec,
         remaining_text: `${days} ngày ${hours} giờ ${mins} phút`,
@@ -248,7 +260,7 @@ async function loadKeys() {
     const keysData = loadLocalKeys();
     const session = getSession();
     const result = Object.keys(keysData)
-        .filter(k => !session || keysData[k].owner === session.username || keysData[k].owner === undefined)
+        .filter(k => !session || keysData[k].owner === session.username || !keysData[k].owner)
         .map(k => keyInfoLocal(k, keysData)).filter(Boolean);
     renderKeys(result);
 }
@@ -271,35 +283,25 @@ function renderKeys(keys) {
     `).join('');
 }
 
-// ==================== CREATE KEY + SHORTEN ====================
+// ==================== CREATE KEY (one click) ====================
 async function createKeyAndShorten() {
-    const name = document.getElementById('newKeyName').value.trim();
-    const redirectUrl = document.getElementById('keyRedirectUrl').value.trim();
     const btn = document.getElementById('createKeyBtn');
     const resultBox = document.getElementById('createResult');
-
-    if (!redirectUrl) {
-        resultBox.style.display = 'block';
-        resultBox.className = 'result-box result-error';
-        resultBox.textContent = 'Vui lòng nhập link đích (link chứa key).';
-        return;
-    }
 
     btn.disabled = true;
     btn.innerHTML = '<span>Đang tạo key & rút gọn...</span>';
 
     try {
         if (hasServer()) {
-            // Server mode
             const session = getSession();
             const data = await apiCall('/api/create-key-and-shorten', 'POST', {
-                name, redirect_url: redirectUrl, owner: session?.username || ''
+                owner: session?.username || ''
             });
             resultBox.style.display = 'block';
             if (data && data.success) {
                 resultBox.className = 'result-box result-success';
                 resultBox.innerHTML = `
-                    <strong>✅ Tạo key & rút gọn thành công!</strong><br>
+                    <strong>✅ Tạo key thành công!</strong><br>
                     Key: <code style="color:var(--success)">${data.key}</code><br>
                     Link rút gọn: <span class="short-url" onclick="copyToClipboard('${data.short_url}')">${data.short_url}</span>
                     <small style="display:block;margin-top:6px;color:var(--text-muted);">Gửi link này cho người dùng. Họ mở link → vào tab Cấp phép IP → nhập key.</small>
@@ -318,20 +320,21 @@ async function createKeyAndShorten() {
             const now = new Date();
             const expires = new Date(now.getTime() + KEY_DURATION_DAYS * 86400000);
 
-            // Rút gọn link chứa key
-            const fullUrl = redirectUrl.includes('?key=') ? redirectUrl : redirectUrl + (redirectUrl.includes('?') ? '&' : '?') + 'key=' + key;
+            // Build URL with key — use current page URL as base
+            const baseUrl = window.location.origin + window.location.pathname;
+            const fullUrl = baseUrl + '?key=' + key;
+
+            // Shorten
             let shortUrl = '';
             try {
                 const apiResp = await fetch(SHORTEN_API + encodeURIComponent(fullUrl));
                 shortUrl = (await apiResp.text()).trim();
             } catch (e) {
-                shortUrl = fullUrl; // fallback
+                shortUrl = fullUrl;
             }
-
             if (!shortUrl.startsWith('http')) shortUrl = fullUrl;
 
             keysData[key] = {
-                name: name || '',
                 owner: session?.username || '',
                 created_at: now.toISOString(),
                 expires_at: expires.toISOString(),
@@ -343,7 +346,7 @@ async function createKeyAndShorten() {
             resultBox.style.display = 'block';
             resultBox.className = 'result-box result-success';
             resultBox.innerHTML = `
-                <strong>✅ Tạo key & rút gọn thành công!</strong><br>
+                <strong>✅ Tạo key thành công!</strong><br>
                 Key: <code style="color:var(--success)">${key}</code><br>
                 Link rút gọn: <span class="short-url" onclick="copyToClipboard('${shortUrl}')">${shortUrl}</span>
                 <small style="display:block;margin-top:6px;color:var(--text-muted);">Gửi link này cho người dùng. Họ mở link → vào tab Cấp phép IP → nhập key.</small>
@@ -357,26 +360,28 @@ async function createKeyAndShorten() {
         resultBox.textContent = '❌ Lỗi: ' + e.message + '\n\nNếu là lỗi CORS, hãy dùng Server mode (Cloudflare Worker).';
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Tạo key &amp; rút gọn';
+        btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Tạo key';
     }
 }
 
 // ==================== RECENT KEYS ====================
 function loadRecentKeys() {
     if (hasServer()) {
-        // Server mode: load from server
         apiCall('/api/list-keys').then(data => {
-            if (data && data.keys) renderRecentKeys(data.keys.slice(0, 10));
+            if (data && data.keys) {
+                const sorted = data.keys.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 20);
+                renderRecentKeys(sorted);
+            }
         }).catch(() => {});
     } else {
         const keysData = loadLocalKeys();
         const session = getSession();
         const all = Object.keys(keysData)
-            .filter(k => !session || keysData[k].owner === session.username || keysData[k].owner === undefined)
+            .filter(k => !session || keysData[k].owner === session.username || !keysData[k].owner)
             .map(k => keyInfoLocal(k, keysData))
             .filter(Boolean)
             .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-            .slice(0, 10);
+            .slice(0, 20);
         renderRecentKeys(all);
     }
 }
@@ -384,17 +389,18 @@ function loadRecentKeys() {
 function renderRecentKeys(keys) {
     const el = document.getElementById('recentKeys');
     if (!keys || keys.length === 0) {
-        el.innerHTML = '<p class="empty-text">Chưa có key nào được tạo.</p>';
+        el.innerHTML = '<p class="empty-text">Chưa có key nào. Nhấn "Tạo key" để bắt đầu.</p>';
         return;
     }
     el.innerHTML = keys.map(k => `
         <div class="recent-key-item">
             <div class="rk-key">🔑 ${k.key}</div>
             ${k.short_url ? `<div class="rk-link" onclick="copyToClipboard('${k.short_url}')">⚡ ${k.short_url}</div>` : ''}
-            <div class="rk-info">📝 ${k.name || 'Không tên'} · ⏰ ${k.remaining_text} · ${k.expired ? 'Hết hạn' : 'Hoạt động'}</div>
+            <div class="rk-info">⏰ ${k.remaining_text} · ${k.expired ? 'Hết hạn' : 'Hoạt động'}${k.authorized_ip ? ' · IP: ' + k.authorized_ip : ''}</div>
             <div class="rk-actions">
                 <button class="btn btn-secondary btn-sm" onclick="copyToClipboard('${k.key}')">Copy key</button>
                 ${k.short_url ? `<button class="btn btn-secondary btn-sm" onclick="copyToClipboard('${k.short_url}')">Copy link</button>` : ''}
+                <button class="btn btn-danger btn-sm" onclick="deleteKey('${k.key}')">Xoá</button>
             </div>
         </div>
     `).join('');
@@ -498,57 +504,7 @@ function updateInfoAfterAuth(data) {
     document.getElementById('expireDate').textContent = 'Hết hạn: ' + data.expires_at;
 }
 
-// ==================== TEST CHECK IP (API test) ====================
-async function testCheckIP() {
-    const ip = document.getElementById('testCheckIP').value.trim();
-    const token = document.getElementById('adminTokenInput').value.trim();
-    const resultBox = document.getElementById('checkResult');
-
-    if (!ip || !token) {
-        resultBox.style.display = 'block';
-        resultBox.className = 'result-box result-error';
-        resultBox.textContent = 'Nhập IP và token.';
-        return;
-    }
-
-    if (hasServer()) {
-        try {
-            const data = await apiCall(`/api/check-ip/${ip}?token=${token}`);
-            resultBox.style.display = 'block';
-            if (data && data.authorized) {
-                resultBox.className = 'result-box result-success';
-                resultBox.innerHTML = `<strong>✅ IP đã cấp phép!</strong><br>IP: ${data.ip}<br>Key: ${data.key}<br>Còn lại: ${data.remaining || 'N/A'}`;
-            } else {
-                resultBox.className = 'result-box result-error';
-                resultBox.innerHTML = `<strong>❌ Chưa cấp phép</strong><br>Lý do: ${data?.reason || 'unknown'}${data?.error ? ' / Token: ' + data.error : ''}`;
-            }
-        } catch (e) {
-            resultBox.style.display = 'block';
-            resultBox.className = 'result-box result-error';
-            resultBox.textContent = '❌ Lỗi kết nối server';
-        }
-    } else {
-        const authIPs = loadLocalAuthIPs();
-        const keysData = loadLocalKeys();
-        resultBox.style.display = 'block';
-        if (authIPs[ip]) {
-            const key = authIPs[ip];
-            const info = keyInfoLocal(key, keysData);
-            if (info && !info.expired) {
-                resultBox.className = 'result-box result-success';
-                resultBox.innerHTML = `<strong>✅ IP đã cấp phép (local)!</strong><br>IP: ${ip}<br>Key: ${key}<br>Còn lại: ${info.remaining_text}`;
-            } else {
-                resultBox.className = 'result-box result-error';
-                resultBox.innerHTML = `<strong>❌ Key hết hạn</strong>`;
-            }
-        } else {
-            resultBox.className = 'result-box result-error';
-            resultBox.innerHTML = `<strong>❌ Chưa cấp phép (local)</strong>`;
-        }
-    }
-}
-
-// ==================== API SERVER CONFIG ====================
+// ==================== API SERVER CONFIG (admin only) ====================
 function saveApiServer() {
     const val = document.getElementById('apiServerInput').value.trim();
     localStorage.setItem(LS_API_SERVER, val);
@@ -578,10 +534,8 @@ function checkUrlForKey() {
     const params = new URLSearchParams(window.location.search);
     const key = params.get('key');
     if (key) {
-        // Tự động chuyển sang tab Cấp phép IP và điền key
         switchTab('authorize');
         document.getElementById('authKey').value = key;
-        // Hiển thị thông báo
         const resultBox = document.getElementById('authResult');
         resultBox.style.display = 'block';
         resultBox.className = 'result-box result-success';

@@ -18,12 +18,10 @@
     </div>
     <h2 id="authTitle">Đăng nhập</h2>
     <p class="auth-sub" id="authSub">Đăng nhập để quản lý key</p>
-
     <div class="auth-tabs">
       <button class="auth-tab active" onclick="switchAuthMode('login')">Đăng nhập</button>
       <button class="auth-tab" onclick="switchAuthMode('register')">Đăng ký</button>
     </div>
-
     <div id="registerNameGroup" class="form-group" style="display:none;">
       <label>Tên hiển thị</label>
       <input type="text" id="authName" class="form-input" placeholder="Tên của bạn" autocomplete="off">
@@ -36,7 +34,6 @@
       <label>Mật khẩu</label>
       <input type="password" id="authPassword" class="form-input" placeholder="••••••••" autocomplete="off">
     </div>
-
     <button class="btn btn-primary btn-block" onclick="doAuth()" id="authBtn">Đăng nhập</button>
     <div class="result-box" id="authResult" style="display:none;"></div>
   </div>
@@ -55,8 +52,9 @@
       </div>
     </div>
     <div class="header-right">
-      <div class="user-badge" id="userBadge">
+      <div class="user-badge">
         <span id="userName">--</span>
+        <span id="adminBadge" class="admin-tag" style="display:none;">ADMIN</span>
         <button class="btn btn-danger btn-sm" onclick="logout()">Đăng xuất</button>
       </div>
     </div>
@@ -114,10 +112,11 @@
       </div>
     </div>
 
-    <div class="section-block" style="margin-top:16px;">
-      <div class="section-header"><h2>⚙️ Cấu hình API Server</h2></div>
+    <!-- ADMIN ONLY: API Server config + API check-ip info -->
+    <div class="section-block admin-only" style="margin-top:16px;">
+      <div class="section-header"><h2>⚙️ API Server (Admin)</h2></div>
       <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">
-        Nhập URL Cloudflare Worker để dùng server mode (proxy check-ip cần server). Để trống = localStorage.
+        Nhập URL Cloudflare Worker để dùng server mode. Để trống = localStorage.
       </p>
       <div class="form-group">
         <label>API Server URL</label>
@@ -127,42 +126,39 @@
         </div>
       </div>
       <div id="apiServerStatus" style="font-size:13px;margin-top:8px;"></div>
+
+      <div class="api-hint" style="margin-top:20px;">
+        <label>API Check IP (cho Proxy gọi):</label>
+        <code>GET &lt;server&gt;/api/check-ip/&lt;ip&gt;?token=admin</code>
+        <p class="api-return">Trả về: <code>{"authorized": true/false}</code></p>
+        <pre class="code-block">import requests
+def is_authorized(ip):
+    r = requests.get(f"https://your-worker/api/check-ip/{ip}", params={"token":"admin"}, timeout=5)
+    return r.json().get("authorized", False)</pre>
+      </div>
     </div>
   </section>
 
   <!-- ==================== TAB 2: TẠO KEY & LINK ==================== -->
   <section class="tab-content" id="tab-link">
     <div class="link-create-container">
+      <!-- Left: Tạo key -->
       <div class="create-card">
-        <h2>Tạo key &amp; rút gọn link</h2>
-        <p class="form-desc">Tạo key mới → tự động rút gọn link chứa key → gửi link rút gọn cho người dùng khác.</p>
-
-        <div class="form-group">
-          <label>Tên key (tuỳ chọn)</label>
-          <input type="text" id="newKeyName" class="form-input" placeholder="VD: Key cho bạn A" autocomplete="off">
-        </div>
-
-        <div class="form-group">
-          <label>Link đích (trang web của bạn)</label>
-          <input type="url" id="keyRedirectUrl" class="form-input" placeholder="https://yourusername.github.io/proxy-key-pages/?key=PKM-XXXX-XXXX-XXXX" autocomplete="off">
-          <p style="font-size:12px;color:var(--text-muted);margin-top:6px;">
-            Link này chứa key sẽ được rút gọn. Người nhận mở link → web tự động lấy key → họ nhập key ở tab Cấp phép IP.
-          </p>
-        </div>
-
-        <button class="btn btn-primary btn-block" onclick="createKeyAndShorten()" id="createKeyBtn">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Tạo key &amp; rút gọn
+        <h2>Tạo key</h2>
+        <p class="form-desc">Nhấn nút để tạo key mới. Key sẽ được tự động rút gọn link và hiển thị bên phải.</p>
+        <button class="btn btn-primary btn-block btn-lg" onclick="createKeyAndShorten()" id="createKeyBtn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Tạo key
         </button>
-
         <div class="result-box" id="createResult" style="display:none;"></div>
       </div>
 
+      <!-- Right: Danh sách key + link rút gọn -->
       <div class="create-card">
-        <h2>Key vừa tạo</h2>
-        <p class="form-desc">Link rút gọn chứa key. Sao chép và gửi cho người dùng.</p>
+        <h2>Key &amp; Link đã tạo</h2>
+        <p class="form-desc">Copy link rút gọn và gửi cho người dùng. Họ mở link → vào tab Cấp phép IP → nhập key.</p>
         <div id="recentKeys" class="recent-keys-list">
-          <p class="empty-text">Chưa có key nào được tạo.</p>
+          <p class="empty-text">Chưa có key nào. Nhấn "Tạo key" để bắt đầu.</p>
         </div>
       </div>
     </div>
@@ -174,61 +170,16 @@
       <div class="authorize-card">
         <h2>Cấp phép IP cho Proxy</h2>
         <p class="form-desc">Nhập key bạn nhận được → IP máy bạn được ghi nhận → proxy cho phép IP này kết nối.</p>
-
         <div class="ip-display"><div class="ip-box"><label>IP hiện tại của máy</label><div class="ip-value" id="authUserIP">Đang tải...</div></div></div>
-
         <div class="form-group">
           <label>Nhập key</label>
           <input type="text" id="authKey" placeholder="PKM-XXXX-XXXX-XXXX" class="form-input" autocomplete="off">
         </div>
-
         <button class="btn btn-primary btn-block" onclick="authorizeIP()" id="authBtn">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 5.5m0 0l5 5L22 9l-5-5"/></svg>
           Cấp phép IP
         </button>
-
         <div class="result-box" id="authResult" style="display:none;"></div>
-      </div>
-
-      <div class="authorize-card">
-        <h2>API Check IP (cho Proxy)</h2>
-        <p class="form-desc">Đây là API để máy proxy (máy khác) gọi kiểm tra IP đã cấp phép chưa. <strong>Không check trên web.</strong></p>
-
-        <div class="api-hint">
-          <label>Endpoint:</label>
-          <code>GET &lt;server&gt;/api/check-ip/&lt;ip&gt;?token=&lt;admin_token&gt;</code>
-        </div>
-
-        <div class="form-group" style="margin-top:16px;">
-          <label>Admin Token</label>
-          <input type="text" id="adminTokenInput" class="form-input" value="admin" autocomplete="off">
-        </div>
-
-        <div class="form-group">
-          <label>IP cần kiểm tra (test thử)</label>
-          <input type="text" id="testCheckIP" class="form-input" placeholder="192.168.1.1" autocomplete="off">
-        </div>
-
-        <button class="btn btn-secondary btn-block" onclick="testCheckIP()">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          Test API
-        </button>
-
-        <div class="result-box" id="checkResult" style="display:none;"></div>
-
-        <div class="api-hint" style="margin-top:16px;">
-          <label>Ví dụ dùng trong proxy (Python):</label>
-          <pre class="code-block">import requests
-
-def is_authorized(client_ip):
-    url = "https://your-worker.workers.dev"
-    resp = requests.get(
-        f"{url}/api/check-ip/{client_ip}",
-        params={"token": "admin"},
-        timeout=5
-    )
-    return resp.json().get("authorized", False)</pre>
-        </div>
       </div>
     </div>
   </section>
