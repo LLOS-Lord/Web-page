@@ -2,6 +2,7 @@
 
 ## Flow
 
+
 ```
 Admin đăng nhập → Nhấn "Tạo key" → Key tự tạo + link tự rút gọn
   → Copy link rút gọn gửi cho user
